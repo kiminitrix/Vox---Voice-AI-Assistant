@@ -1,0 +1,7 @@
+{
+  "name": "Vox - Voice AI Assistant",
+  "description": "A sophisticated, low-latency voice-only conversational AI assistant powered by Gemini 2.5 Flash.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
