@@ -9,12 +9,36 @@ const MODEL_NAME = 'gemini-2.5-flash-native-audio-preview-09-2025';
 const SAMPLE_RATE_IN = 16000;
 const SAMPLE_RATE_OUT = 24000;
 
+const DEFAULT_INSTRUCTIONS = `You are a voice-only conversational AI assistant. 
+CORE RULES (ABSOLUTE):
+1. You MUST communicate ONLY through spoken language.
+2. You MUST NEVER output text, markdown, bullet points, lists, emojis, symbols, or formatting of any kind.
+3. Your responses are intended to be converted directly into audio.
+4. Speak naturally, as a human would in a real conversation.
+5. If a response sounds like writing, rephrase it into spoken language.
+
+VOICE & DELIVERY STYLE:
+- Speak in a calm, warm, clear, and confident voice.
+- Use natural conversational rhythm, including short pauses.
+- Keep sentences concise and easy to follow.
+
+LANGUAGE HANDLING:
+- Match the user’s spoken language automatically.
+- If the user speaks Malay, respond in Malay.
+- If the user speaks English, respond in English.
+- If the user mixes languages, respond naturally using the same mix.
+
+DEFAULT RESPONSE LENGTH:
+- One to three spoken sentences.`;
+
 const App: React.FC = () => {
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [intensity, setIntensity] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [systemInstruction, setSystemInstruction] = useState(DEFAULT_INSTRUCTIONS);
 
   // Audio Context References
   const inputAudioCtxRef = useRef<AudioContext | null>(null);
@@ -71,8 +95,6 @@ const App: React.FC = () => {
         sum += dataArray[i];
       }
       const average = sum / bufferLength;
-      // If muted, we effectively visually zero out user input intensity, 
-      // but we might still want to see some subtle pulse if the model is speaking.
       const displayedIntensity = isMutedRef.current ? (isSpeaking ? average / 512 : 0) : average / 255;
       setIntensity(displayedIntensity); 
       rafRef.current = requestAnimationFrame(update);
@@ -106,41 +128,17 @@ const App: React.FC = () => {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
           },
-          systemInstruction: `You are a voice-only conversational AI assistant. 
-          CORE RULES (ABSOLUTE):
-          1. You MUST communicate ONLY through spoken language.
-          2. You MUST NEVER output text, markdown, bullet points, lists, emojis, symbols, or formatting of any kind.
-          3. Your responses are intended to be converted directly into audio.
-          4. Speak naturally, as a human would in a real conversation.
-          5. If a response sounds like writing, rephrase it into spoken language.
-          
-          VOICE & DELIVERY STYLE:
-          - Speak in a calm, warm, clear, and confident voice.
-          - Use natural conversational rhythm, including short pauses.
-          - Keep sentences concise and easy to follow.
-          
-          LANGUAGE HANDLING:
-          - Match the user’s spoken language automatically.
-          - If the user speaks Malay, respond in Malay.
-          - If the user speaks English, respond in English.
-          - If the user mixes languages, respond naturally using the same mix.
-          
-          DEFAULT RESPONSE LENGTH:
-          - One to three spoken sentences.
-          `,
+          systemInstruction: systemInstruction,
         },
         callbacks: {
           onopen: () => {
             setStatus('connected');
             
-            // Start streaming audio to the model
             const source = inputAudioCtxRef.current!.createMediaStreamSource(stream);
             const scriptProcessor = inputAudioCtxRef.current!.createScriptProcessor(4096, 1, 1);
             
             scriptProcessor.onaudioprocess = (e) => {
-              // Check the ref to see if we should send audio
               if (isMutedRef.current) return;
-
               const inputData = e.inputBuffer.getChannelData(0);
               const pcmBlob = createPcmBlob(inputData);
               sessionPromise.then(session => {
@@ -229,6 +227,57 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center relative overflow-hidden bg-slate-950 px-6">
       
+      {/* Settings Button */}
+      <button 
+        onClick={() => setIsSettingsOpen(true)}
+        className="absolute top-8 right-8 z-20 p-3 rounded-full bg-slate-900/50 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-all active:scale-90"
+        title="Persona Settings"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+          <div className="bg-slate-900 w-full max-w-2xl rounded-2xl border border-slate-800 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 zoom-in-95 duration-300">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-medium text-white">System Instructions</h2>
+                <p className="text-slate-500 text-sm">Define how Vox speaks and behaves</p>
+              </div>
+              <button 
+                onClick={() => setIsSettingsOpen(false)}
+                className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <textarea
+                value={systemInstruction}
+                onChange={(e) => setSystemInstruction(e.target.value)}
+                className="w-full h-80 bg-slate-950 border border-slate-800 rounded-xl p-4 text-slate-300 font-mono text-sm focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+                placeholder="Enter system instructions for the AI..."
+              />
+              {status === 'connected' && (
+                <div className="mt-4 flex items-center space-x-2 text-amber-400/80 text-xs">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                  <span>Changes will take effect after you reconnect.</span>
+                </div>
+              )}
+            </div>
+            <div className="p-6 bg-slate-900/50 border-t border-slate-800 flex justify-end">
+              <button 
+                onClick={() => setIsSettingsOpen(false)}
+                className="px-6 py-2 bg-indigo-600 text-white rounded-full font-medium hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-500/20"
+              >
+                Apply Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Background Glow Effect */}
       <div 
         className={`absolute glow-orb w-[600px] h-[600px] rounded-full transition-all duration-700 ease-in-out opacity-30 ${
